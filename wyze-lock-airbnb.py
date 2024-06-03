@@ -65,16 +65,14 @@ def list_upcoming_bookings():
         bookings = fetch_airbnb_bookings(home['ical_url'])
         for booking in bookings:
             check_in = booking['check_in'].replace(hour=int(home['check_in_time'].split(':')[0]), minute=int(home['check_in_time'].split(':')[1]))
+            check_out = booking['check_out'].replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]))
             if current_time <= check_in <= end_time:
                 upcoming_bookings.append({
                     'home': home['name'],
                     'check_in': check_in,
-                    'check_out': booking['check_out'],
+                    'check_out': check_out,
                     'access_code': booking['guest_phone_last4']
                 })
-
-    for booking in upcoming_bookings:
-        print(f"Home: {booking['home']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
 
     for booking in upcoming_bookings:
         print(f"Home: {booking['home']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
