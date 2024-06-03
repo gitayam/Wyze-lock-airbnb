@@ -80,10 +80,10 @@ def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
     except WyzeApiError as e:
         print(f"Failed to create access code for {name} in {device_mac}: {e}")
 
-def delete_access_codes(device_mac, check_out_date):
+def delete_access_codes(device_mac, check_out_time):
     keys = client.devices.locks.get_keys(device_mac=device_mac)
     for key in keys:
-        if key.name.endswith(f"days") and datetime.strptime(key.periodicity.end_time, "%Y-%m-%dT%H:%M:%S") < check_out_date:
+        if key.name.endswith(f"days") and datetime.strptime(key.periodicity.end_time, "%Y-%m-%dT%H:%M:%S") <= check_out_time:
             try:
                 client.devices.locks.delete_access_code(
                     device_mac=device_mac,
@@ -108,14 +108,19 @@ def process_bookings():
                 check_out
             )
 
-def cleanup_access_codes():
-    current_time = datetime.now()
+def schedule_cleanup_jobs():
     for home in HOMES:
-        delete_access_codes(home['lock_device_mac'], current_time)
+        # Schedule cleanup at checkout time
+        schedule_time = home['check_out_time']
+        schedule.every().day.at(schedule_time).do(cleanup_access_codes_for_home, home)
+
+def cleanup_access_codes_for_home(home):
+    current_time = datetime.now().replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]), second=0, microsecond=0)
+    delete_access_codes(home['lock_device_mac'], current_time)
 
 # Schedule tasks
-schedule.every(1).hour.do(process_bookings)
-schedule.every().day.at("23:59").do(cleanup_access_codes)
+schedule.every(15).minutes.do(process_bookings)
+schedule_cleanup_jobs()
 
 def main():
     while True:
