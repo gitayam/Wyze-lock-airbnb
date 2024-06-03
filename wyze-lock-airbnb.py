@@ -35,7 +35,8 @@ HOMES = [
 WYZE_ACCESS_TOKEN = os.getenv('WYZE_ACCESS_TOKEN')
 
 # Initialize Wyze Client
-client = Client(token=WYZE_ACCESS_TOKEN)
+client = Client()
+client.set_access_token(WYZE_ACCESS_TOKEN)
 
 def fetch_airbnb_bookings(ical_url):
     response = requests.get(ical_url)
@@ -109,13 +110,13 @@ def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
     
     permission = LockKeyPermission(can_unlock=True, can_lock=True)
     periodicity = LockKeyPeriodicity(
-        type="once",  # Valid for a single time period
-        start_time=check_in.strftime("%Y-%m-%dT%H:%M:%S"),  # ISO 8601 format
-        end_time=check_out.strftime("%Y-%m-%dT%H:%M:%S")    # ISO 8601 format
+        begin=check_in.strftime("%H%M%S"),  # Begin time in HHMMSS format
+        end=check_out.strftime("%H%M%S"),   # End time in HHMMSS format
+        valid_days=[0, 1, 2, 3, 4, 5, 6]    # All days of the week
     )
     
     try:
-        response = client.devices.locks.create_access_code(
+        response = client.locks.create_access_code(
             device_mac=device_mac,
             access_code=access_code,
             name=name,
@@ -125,6 +126,7 @@ def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
         print(f"Access code {access_code} created for {name} in {device_mac}")
     except WyzeApiError as e:
         print(f"Failed to create access code for {name} in {device_mac}: {e}")
+
 
 def delete_access_codes(device_mac, check_out_time):
     keys = client.devices.locks.get_keys(device_mac=device_mac)
