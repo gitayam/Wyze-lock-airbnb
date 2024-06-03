@@ -1,3 +1,4 @@
+#get-access_refresh_token.py
 import requests
 import os
 from dotenv import load_dotenv, set_key
@@ -11,6 +12,10 @@ WYZE_PASSWORD = os.getenv('WYZE_PASSWORD')
 WYZE_API_KEY = os.getenv('WYZE_API_KEY')
 WYZE_KEY_ID = os.getenv('WYZE_KEY_ID')
 ENV_FILE_PATH = '.env'
+## if any of the above constants are None, the script will not run and prompt user to set the values in the .env file
+if not all([WYZE_EMAIL, WYZE_PASSWORD, WYZE_API_KEY, WYZE_KEY_ID]):
+    print("Please ensure WYZE_EMAIL, WYZE_PASSWORD, WYZE_API_KEY, and WYZE_KEY_ID are set in the .env file.")
+    exit()
 
 def get_tokens(email, password, api_key, key_id):
     login_url = 'https://auth-prod.api.wyze.com/api/user/login'
