@@ -3,7 +3,7 @@ import requests
 from icalendar import Calendar
 from wyze_sdk import Client
 from wyze_sdk.errors import WyzeApiError
-from wyze_sdk.models.devices import LockKeyPermission, LockKeyPeriodicity
+from wyze_sdk.models.devices.locks import LockKey, LockKeyPermission, LockKeyPeriodicity
 import re
 import schedule
 import time

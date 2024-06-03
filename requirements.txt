@@ -4,3 +4,4 @@ icalendar
 wyze-sdk
 python-dotenv
 schedule
+argparse
