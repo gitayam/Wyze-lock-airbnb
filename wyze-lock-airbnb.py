@@ -86,6 +86,21 @@ def list_upcoming_bookings(days=7):
         print(f"Home: {booking['home']}, Guest: {booking['guest_name']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
 
 
+def process_bookings_for_days(days):
+    current_time = datetime.now()
+    end_time = current_time + timedelta(days=days)
+
+    for home in HOMES:
+        bookings = fetch_airbnb_bookings(home['ical_url'])
+        for booking in bookings:
+            check_in = datetime.combine(booking['check_in'], datetime.min.time())
+            check_out = datetime.combine(booking['check_out'], datetime.min.time())
+            check_in = check_in.replace(hour=int(home['check_in_time'].split(':')[0]), minute=int(home['check_in_time'].split(':')[1]))
+            check_out = check_out.replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]))
+            if current_time <= check_in <= end_time:
+                create_access_code(home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
+
+
 def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
     access_code = guest_phone_last4
     # Custom name format: "DayOfWeek-#days"
