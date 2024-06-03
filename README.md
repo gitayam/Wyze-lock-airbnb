@@ -1,4 +1,3 @@
-#readme.md
 # Wyze-lock-airbnb
 
 This project automates the management of Wyze lock access codes based on Airbnb bookings. It fetches booking information from Airbnb calendars and sets or deletes lock access codes accordingly.
@@ -12,52 +11,46 @@ This project automates the management of Wyze lock access codes based on Airbnb 
 ## Installation
 
 1. **Clone the Repository**
-   ```bash
+   ```shell
    git clone git@github.com:gitayam/Wyze-lock-airbnb.git
    cd Wyze-lock-airbnb
    ```
 
 2. **Create a Virtual Environment**
-   ```bash
+   ```shell
    python3 -m venv venv
    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
    ```
 
 3. **Install Dependencies**
-   ```bash
+   ```shell
    pip install -r requirements.txt
    ```
 
 4. **Set Up Environment Variables**
    - Copy the `.env` template and edit it with your credentials
-   ```bash
+   ```shell
    cp .env-template .env
    nano .env
    ```
    - Or create a `.env` file in the project directory and add the following:
      ```env
-     WYZE_ACCESS_TOKEN=your_wyze_access_token
-
-     HOME_1_ICAL_URL=your_home_1_airbnb_ical_url
-     HOME_1_LOCK_DEVICE_MAC=your_home_1_lock_device_mac
-     HOME_1_CHECK_IN_TIME=16:00
-     HOME_1_CHECK_OUT_TIME=11:00
-
-     HOME_2_ICAL_URL=your_home_2_airbnb_ical_url
-     HOME_2_LOCK_DEVICE_MAC=your_home_2_lock_device_mac
-     HOME_2_CHECK_IN_TIME=15:00
-     HOME_2_CHECK_OUT_TIME=10:00
+     WYZE_EMAIL=your_email@example.com
+     WYZE_PASSWORD=your_password
+     WYZE_API_KEY=your_api_key
+     WYZE_KEY_ID=your_key_id
      ```
-   - Add `.env` to `.gitignore`
-     ```bash
-     echo ".env" >> .gitignore
-     echo "venv" >> .gitignore
-     ```
+
+5. **Obtain Access and Refresh Tokens**
+   - Run the script to get your access and refresh tokens. This will automatically append them to your `.env` file.
+   ```shell
+   python get-access_refresh_token.py
+   ```
 
 ## Running the Script
 
 1. **Run the Script**
-   ```bash
+   ```shell
    python wyze-lock-airbnb.py
    ```
 
@@ -91,12 +84,12 @@ To run the script continuously on a server, you can set it up as a service using
 2. **Enable and Start the Service**
 
 **Linux:**
-   ```bash
+   ```shell
    sudo systemctl enable wyze-lock-airbnb.service
    sudo systemctl start wyze-lock-airbnb.service
    ```
 **MacOS:**
-   ```bash
+   ```shell
    sudo launchctl load /etc/systemd/system/wyze-lock-airbnb.service
    sudo launchctl start wyze-lock-airbnb.service
    ```
