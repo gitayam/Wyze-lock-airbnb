@@ -7,9 +7,10 @@ from wyze_sdk.models.devices import LockKeyPermission, LockKeyPeriodicity
 import re
 import schedule
 import time
-from datetime import datetime, timedelta  # Added timedelta for date range calculation
+from datetime import datetime, timedelta  # Added timedelta
 from dotenv import load_dotenv
 import os
+import argparse  # Added argparse for command-line arguments
 
 # Load environment variables from .env file
 load_dotenv()
@@ -71,6 +72,9 @@ def list_upcoming_bookings():
                     'check_out': booking['check_out'],
                     'access_code': booking['guest_phone_last4']
                 })
+
+    for booking in upcoming_bookings:
+        print(f"Home: {booking['home']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
 
     for booking in upcoming_bookings:
         print(f"Home: {booking['home']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
