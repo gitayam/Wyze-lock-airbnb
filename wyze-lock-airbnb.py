@@ -148,9 +148,16 @@ schedule.every().day.at("00:00").do(list_upcoming_bookings)  # Schedule listing 
 schedule_cleanup_jobs()
 
 def main():
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    parser = argparse.ArgumentParser(description="Wyze Lock Airbnb Automation Script")
+    parser.add_argument('--list-upcoming', action='store_true', help="List upcoming bookings for the next 7 days")
+    args = parser.parse_args()
+
+    if args.list_upcoming:
+        list_upcoming_bookings()
+    else:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()
