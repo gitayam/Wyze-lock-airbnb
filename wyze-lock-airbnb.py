@@ -49,10 +49,15 @@ def fetch_airbnb_bookings(ical_url):
             phone_match = re.search(r'Phone Number \(Last 4 Digits\): (\d{4})', description)
             if phone_match:
                 phone_last4 = phone_match.group(1)
+                check_in = component.get('DTSTART').dt
+                check_out = component.get('DTEND').dt
+                days_stay = (check_out - check_in).days
+                guest_name = f"{check_in.strftime('%a')}-{days_stay}days"
                 bookings.append({
-                    'check_in': component.get('DTSTART').dt,
-                    'check_out': component.get('DTEND').dt,
-                    'guest_phone_last4': phone_last4
+                    'check_in': check_in,
+                    'check_out': check_out,
+                    'guest_phone_last4': phone_last4,
+                    'guest_name': guest_name
                 })
     return bookings
 
@@ -76,6 +81,7 @@ def list_upcoming_bookings():
 
     for booking in upcoming_bookings:
         print(f"Home: {booking['home']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
+
 
 def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
     access_code = guest_phone_last4
