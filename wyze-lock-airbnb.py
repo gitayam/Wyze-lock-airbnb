@@ -148,6 +148,20 @@ def schedule_cleanup_jobs():
 def cleanup_access_codes_for_home(home):
     current_time = datetime.now().replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]), second=0, microsecond=0)
     delete_access_codes(home['lock_device_mac'], current_time)
+    
+def process_bookings_for_days(days):
+    current_time = datetime.now()
+    end_time = current_time + timedelta(days=days)
+
+    for home in HOMES:
+        bookings = fetch_airbnb_bookings(home['ical_url'])
+        for booking in bookings:
+            check_in = datetime.combine(booking['check_in'], datetime.min.time())
+            check_out = datetime.combine(booking['check_out'], datetime.min.time())
+            check_in = check_in.replace(hour=int(home['check_in_time'].split(':')[0]), minute=int(home['check_in_time'].split(':')[1]))
+            check_out = check_out.replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]))
+            if current_time <= check_in <= end_time:
+                create_access_code(home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
 
 # Schedule tasks
 schedule.every(15).minutes.do(process_bookings)
@@ -157,14 +171,18 @@ schedule_cleanup_jobs()
 def main():
     parser = argparse.ArgumentParser(description="Wyze Lock Airbnb Automation Script")
     parser.add_argument('--list-upcoming', action='store_true', help="List upcoming bookings for the next 7 days")
+    parser.add_argument('--set-days', type=int, help="Set access codes for bookings in the next specified number of days")
     args = parser.parse_args()
 
     if args.list_upcoming:
         list_upcoming_bookings()
+    elif args.set_days:
+        process_bookings_for_days(args.set_days)
     else:
         while True:
             schedule.run_pending()
             time.sleep(1)
+
 
 if __name__ == "__main__":
     main()
