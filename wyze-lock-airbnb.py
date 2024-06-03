@@ -18,14 +18,14 @@ load_dotenv()
 # Constants
 HOMES = [
     {
-        'name': 'Home 1',
+        'name': os.getenv('HOME_1_NAME'),
         'ical_url': os.getenv('HOME_1_ICAL_URL'),
         'lock_device_mac': os.getenv('HOME_1_LOCK_DEVICE_MAC'),
         'check_in_time': os.getenv('HOME_1_CHECK_IN_TIME'),
         'check_out_time': os.getenv('HOME_1_CHECK_OUT_TIME')
     },
     {
-        'name': 'Home 2',
+        'name': os.getenv('HOME_2_NAME'),
         'ical_url': os.getenv('HOME_2_ICAL_URL'),
         'lock_device_mac': os.getenv('HOME_2_LOCK_DEVICE_MAC'),
         'check_in_time': os.getenv('HOME_2_CHECK_IN_TIME'),
