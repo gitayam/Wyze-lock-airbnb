@@ -7,7 +7,7 @@ from wyze_sdk.models.devices import LockKeyPermission, LockKeyPeriodicity
 import re
 import schedule
 import time
-from datetime import datetime
+from datetime import datetime, timedelta  # Added timedelta for date range calculation
 from dotenv import load_dotenv
 import os
 
@@ -140,6 +140,7 @@ def cleanup_access_codes_for_home(home):
 
 # Schedule tasks
 schedule.every(15).minutes.do(process_bookings)
+schedule.every().day.at("00:00").do(list_upcoming_bookings)  # Schedule listing of upcoming bookings at midnight daily
 schedule_cleanup_jobs()
 
 def main():
