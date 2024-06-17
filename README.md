@@ -2,6 +2,13 @@
 
 This project automates the management of Wyze lock access codes based on Airbnb bookings. It fetches booking information from Airbnb calendars and sets or deletes lock access codes accordingly.
 
+#NOTE: Still in active development. 
+
+## Roadmap
+- [ ] Constant running checking every x min between a time range (checkin time)
+- [ ] Build into a website for non cli use
+- [ ] Work with other brands
+- [ ] Check for Deleted / Canceled Stays and Delete Code
 ## Prerequisites
 
 - Python 3.x
