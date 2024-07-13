@@ -2,6 +2,13 @@
 
 This project automates the management of Wyze lock access codes based on Airbnb bookings. It fetches booking information from Airbnb calendars and sets or deletes lock access codes accordingly.
 
+#NOTE: Still in active development. 
+
+## Roadmap
+- [ ] Constant running checking every x min between a time range (checkin time)
+- [ ] Build into a website for non cli use
+- [ ] Work with other brands
+- [ ] Check for Deleted / Canceled Stays and Delete Code
 ## Prerequisites
 
 - Python 3.x
@@ -34,12 +41,12 @@ This project automates the management of Wyze lock access codes based on Airbnb 
    nano .env
    ```
    - Or create a `.env` file in the project directory and add the following:
-     ```env
-     WYZE_EMAIL=your_email@example.com
-     WYZE_PASSWORD=your_password
-     WYZE_API_KEY=your_api_key
-     WYZE_KEY_ID=your_key_id
-     ```
+  ```env
+  WYZE_EMAIL=your_email@example.com
+  WYZE_PASSWORD=your_password
+  WYZE_API_KEY=your_api_key
+  WYZE_KEY_ID=your_key_id
+  ```
 
 5. **Obtain Access and Refresh Tokens**
    - Run the script to get your access and refresh tokens. This will automatically append them to your `.env` file.
