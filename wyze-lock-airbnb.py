@@ -3,7 +3,6 @@ import requests
 from icalendar import Calendar
 from wyze_sdk import Client
 from wyze_sdk.errors import WyzeApiError, WyzeRequestError  # Ensure WyzeRequestError is imported
-
 from wyze_sdk.models.devices.locks import LockKey, LockKeyPermission, LockKeyPeriodicity
 import re
 import schedule
@@ -12,6 +11,11 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 import argparse
+#import smtp as smtplib
+import pytz
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,7 +39,53 @@ HOMES = [
 ]
 WYZE_ACCESS_TOKEN = os.getenv('WYZE_ACCESS_TOKEN')
 WYZE_REFRESH_TOKEN = os.getenv('WYZE_REFRESH_TOKEN')
+#Send email alert with roll up of locks set by homes and times/dates. This should run each time a lock is set
+def sendEmail(home, lock, check_in, check_out):
+    MAIL_TO = os.getenv('MAIL_TO')
+    SMTP_HOST = os.getenv('SMTP_HOST')
+    SMTP_PORT = os.getenv('SMTP_PORT')
+    SMTP_USER = os.getenv('SMTP_USERNAME')
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+    SMTP_FROM = os.getenv('SMTP_FROM')
 
+    # Check if necessary environment variables are set
+    if not all([MAIL_TO, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM]):
+        print("Error: Missing environment variables for email configuration.")
+        return False
+
+    # Format the check-in and check-out times
+    check_in_str = check_in.strftime('%d %B %Y %H:%M')
+    check_out_str = check_out.strftime('%d %B %Y %H:%M')
+
+    Email_Subject = f"Wyze Lock Update: {home}"
+    Email_Body = f"""
+    Wyze Lock Update for Home: {home}
+
+    Lock Information:
+    -----------------
+    Lock: {lock}
+    Duration: {check_in_str} - {check_out_str}
+
+    This is an automated message.
+    """
+
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_FROM
+    msg['To'] = MAIL_TO
+    msg['Subject'] = Email_Subject
+    msg.attach(MIMEText(Email_Body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(SMTP_HOST, int(SMTP_PORT))
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(SMTP_FROM, MAIL_TO, msg.as_string())
+        server.quit()
+        print("Email sent successfully.")
+        return True
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        return False
 # Function to refresh the access token
 def refresh_access_token(refresh_token):
     url = "https://api.wyzecam.com/app/user/refresh_token"
@@ -71,15 +121,17 @@ def get_client():
     except WyzeApiError as e:
         if "AccessTokenError" in str(e) or "access token expired" in str(e):
             print("Access token expired, refreshing...")
-            WYZE_ACCESS_TOKEN, WYZE_REFRESH_TOKEN = refresh_access_token(WYZE_REFRESH_TOKEN)
-            os.environ['WYZE_ACCESS_TOKEN'] = WYZE_ACCESS_TOKEN
-            os.environ['WYZE_REFRESH_TOKEN'] = WYZE_REFRESH_TOKEN
-            client = Client(token=WYZE_ACCESS_TOKEN)
+            try:
+                WYZE_ACCESS_TOKEN, WYZE_REFRESH_TOKEN = refresh_access_token(WYZE_REFRESH_TOKEN)
+                os.environ['WYZE_ACCESS_TOKEN'] = WYZE_ACCESS_TOKEN
+                os.environ['WYZE_REFRESH_TOKEN'] = WYZE_REFRESH_TOKEN
+                client = Client(token=WYZE_ACCESS_TOKEN)
+            except Exception as refresh_error:
+                print(f"Failed to refresh access token: {refresh_error}")
+                raise e  # Re-raise the original error if refreshing fails
         else:
-            raise e
+            raise e  # Re-raise the original error if it's not an access token issue
     return client
-
-client = get_client()
 
 # Mock function for get_crypt_secret since actual endpoint is unknown
 def get_crypt_secret():
@@ -109,6 +161,33 @@ def fetch_airbnb_bookings(ical_url):
                     'guest_name': guest_name
                 })
     return bookings
+def sendTestEmail(email, subject, body):
+    SMTP_HOST = os.getenv('SMTP_HOST')
+    SMTP_FROM = os.getenv('SMTP_FROM')
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+    SMTP_PORT = os.getenv('SMTP_PORT')
+
+    if not all([SMTP_HOST, SMTP_FROM, SMTP_PASSWORD, SMTP_PORT]):
+        print("Error: Missing environment variables for email configuration.")
+        return False
+
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_FROM
+    msg['To'] = email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_FROM, SMTP_PASSWORD)
+        server.sendmail(SMTP_FROM, email, msg.as_string())
+        server.quit()
+        print("Test email sent successfully.")
+        return True
+    except Exception as e:
+        print(f"Failed to send test email: {e}")
+        return False
 
 def list_upcoming_bookings(days=7):
     upcoming_bookings = []
@@ -173,7 +252,8 @@ def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
             permission=permission,
             periodicity=periodicity
         )
-
+        #send email notification
+        sendEmail(home=device_mac, lock=access_code, check_in=check_in, check_out=check_out)
         print(f"Access code {access_code} created for {name} in {device_mac}")
     except WyzeApiError as e:
         print(f"Failed to create access code for {name} in {device_mac}: {e}")
@@ -224,13 +304,24 @@ def main():
     parser = argparse.ArgumentParser(description="Wyze Lock Airbnb Automation Script")
     parser.add_argument('--list-upcoming', action='store_true', help="List upcoming bookings for the next 7 days")
     parser.add_argument('--set-days', type=int, help="Set access codes for bookings in the next specified number of days")
+    parser.add_argument('--testemail', action='store_true', help="Send a test email to verify email configuration")
     args = parser.parse_args()
 
-    if args.list_upcoming:
+    if args.testemail:
+        # Define the test email details
+        test_email = os.getenv('MAIL_TO')
+        test_subject = "Test Email from Wyze Lock Airbnb Script"
+        test_body = "This is a test email to verify the email configuration."
+        sendTestEmail(test_email, test_subject, test_body)
+        return  # Use return to exit the function after sending test email
+    elif args.list_upcoming:
+        client = get_client()  # Initialize Wyze client only if not testing email
         list_upcoming_bookings()
     elif args.set_days:
+        client = get_client()  # Initialize Wyze client only if not testing email
         process_bookings_for_days(args.set_days)
     else:
+        client = get_client()  # Initialize Wyze client only if not testing email
         while True:
             schedule.run_pending()
             time.sleep(1)
