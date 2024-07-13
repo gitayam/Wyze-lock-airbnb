@@ -1,16 +1,17 @@
-#wyze-lock-airbnb.py
+#wyze-locak-airbnb.py
 import requests
 from icalendar import Calendar
 from wyze_sdk import Client
-from wyze_sdk.errors import WyzeApiError
+from wyze_sdk.errors import WyzeApiError, WyzeRequestError  # Ensure WyzeRequestError is imported
+
 from wyze_sdk.models.devices.locks import LockKey, LockKeyPermission, LockKeyPeriodicity
 import re
 import schedule
 import time
-from datetime import datetime, timedelta  # Added timedelta
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
-import argparse  # Added argparse for command-line arguments
+import argparse
 
 # Load environment variables from .env file
 load_dotenv()
@@ -33,10 +34,57 @@ HOMES = [
     }
 ]
 WYZE_ACCESS_TOKEN = os.getenv('WYZE_ACCESS_TOKEN')
+WYZE_REFRESH_TOKEN = os.getenv('WYZE_REFRESH_TOKEN')
 
-# Initialize Wyze Client
-client = Client()
-client.set_access_token(WYZE_ACCESS_TOKEN)
+# Function to refresh the access token
+def refresh_access_token(refresh_token):
+    url = "https://api.wyzecam.com/app/user/refresh_token"
+    payload = {
+        "app_ver": "wyze_developer_api",
+        "app_version": "wyze_developer_api",
+        "phone_id": "wyze_developer_api",
+        "refresh_token": refresh_token,
+        "sc": "wyze_developer_api",
+        "sv": "wyze_developer_api",
+        "ts": int(time.time() * 1000)
+    }
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        new_access_token = data['data']['access_token']
+        new_refresh_token = data['data']['refresh_token']
+        return new_access_token, new_refresh_token
+    else:
+        raise Exception(f"Failed to refresh token: {response.status_code} - {response.text}")
+
+# Function to get the client
+def get_client():
+    global WYZE_ACCESS_TOKEN, WYZE_REFRESH_TOKEN
+    try:
+        client = Client(token=WYZE_ACCESS_TOKEN)
+        # Test if the access token is valid
+        client.devices_list()
+    except WyzeApiError as e:
+        if "AccessTokenError" in str(e) or "access token expired" in str(e):
+            print("Access token expired, refreshing...")
+            WYZE_ACCESS_TOKEN, WYZE_REFRESH_TOKEN = refresh_access_token(WYZE_REFRESH_TOKEN)
+            os.environ['WYZE_ACCESS_TOKEN'] = WYZE_ACCESS_TOKEN
+            os.environ['WYZE_REFRESH_TOKEN'] = WYZE_REFRESH_TOKEN
+            client = Client(token=WYZE_ACCESS_TOKEN)
+        else:
+            raise e
+    return client
+
+client = get_client()
+
+# Mock function for get_crypt_secret since actual endpoint is unknown
+def get_crypt_secret():
+    # This is a mock function. Replace this with actual functionality if available.
+    return "mock_secret"
 
 def fetch_airbnb_bookings(ical_url):
     response = requests.get(ical_url)
@@ -86,7 +134,6 @@ def list_upcoming_bookings(days=7):
     for booking in upcoming_bookings:
         print(f"Home: {booking['home']}, Guest: {booking['guest_name']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
 
-
 def process_bookings_for_days(days):
     current_time = datetime.now()
     end_time = current_time + timedelta(days=days)
@@ -101,39 +148,49 @@ def process_bookings_for_days(days):
             if current_time <= check_in <= end_time:
                 create_access_code(home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
 
-
 def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
-    access_code = guest_phone_last4
-    # Custom name format: "DayOfWeek-#days"
+    access_code = str(guest_phone_last4).encode()  # Ensure access_code is a string
+    access_code = str(access_code)  
+    print(f"DEBUG: Access code before validation: {access_code}")  # Debug print
     days_stay = (check_out - check_in).days
     name = f"{check_in.strftime('%a')}-{days_stay}days"
-    
+
     permission = LockKeyPermission(can_unlock=True, can_lock=True)
     periodicity = LockKeyPeriodicity(
-        begin=check_in.strftime("%H%M%S"),  # Begin time in HHMMSS format
-        end=check_out.strftime("%H%M%S"),   # End time in HHMMSS format
-        valid_days=[0, 1, 2, 3, 4, 5, 6]    # All days of the week
+        begin=check_in.strftime("%H%M%S"),
+        end=check_out.strftime("%H%M%S"),
+        valid_days=[0, 1, 2, 3, 4, 5, 6]
     )
-    
+
     try:
+        # Validate access_code as a string
+        if not re.match(r'\d{4,8}$', str(access_code)):  # Ensure the check is on the string representation
+            raise ValueError("Access code must be a 4-8 digit number")
         response = client.locks.create_access_code(
             device_mac=device_mac,
-            access_code=access_code,
+            access_code=str(access_code).encode(),  # Correct to encode after validation
             name=name,
             permission=permission,
             periodicity=periodicity
         )
+
         print(f"Access code {access_code} created for {name} in {device_mac}")
     except WyzeApiError as e:
         print(f"Failed to create access code for {name} in {device_mac}: {e}")
+    except ValueError as e:
+        print(f"Validation error: {e}")
+    except WyzeRequestError as e:
+        print(f"Error retrieving encryption secret: {e}")
+    except Exception as e:
+        print(f"Unexpected error while creating access code for {name} with data {access_code}: {e}")
 
 
 def delete_access_codes(device_mac, check_out_time):
-    keys = client.devices.locks.get_keys(device_mac=device_mac)
+    keys = client.locks.get_keys(device_mac=device_mac)
     for key in keys:
         if key.name.endswith(f"days") and datetime.strptime(key.periodicity.end_time, "%Y-%m-%dT%H:%M:%S") <= check_out_time:
             try:
-                client.devices.locks.delete_access_code(
+                client.locks.delete_access_code(
                     device_mac=device_mac,
                     access_code_id=key.id
                 )
@@ -144,45 +201,23 @@ def delete_access_codes(device_mac, check_out_time):
 def process_bookings():
     for home in HOMES:
         bookings = fetch_airbnb_bookings(home['ical_url'])
-        
         for booking in bookings:
             check_in = booking['check_in'].replace(hour=int(home['check_in_time'].split(':')[0]), minute=int(home['check_in_time'].split(':')[1]))
             check_out = booking['check_out'].replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]))
-            
-            create_access_code(
-                home['lock_device_mac'], 
-                booking['guest_phone_last4'], 
-                check_in, 
-                check_out
-            )
+            create_access_code(home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
 
 def schedule_cleanup_jobs():
     for home in HOMES:
-        # Schedule cleanup at checkout time
         schedule_time = home['check_out_time']
         schedule.every().day.at(schedule_time).do(cleanup_access_codes_for_home, home)
 
 def cleanup_access_codes_for_home(home):
     current_time = datetime.now().replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]), second=0, microsecond=0)
     delete_access_codes(home['lock_device_mac'], current_time)
-    
-def process_bookings_for_days(days):
-    current_time = datetime.now()
-    end_time = current_time + timedelta(days=days)
-
-    for home in HOMES:
-        bookings = fetch_airbnb_bookings(home['ical_url'])
-        for booking in bookings:
-            check_in = datetime.combine(booking['check_in'], datetime.min.time())
-            check_out = datetime.combine(booking['check_out'], datetime.min.time())
-            check_in = check_in.replace(hour=int(home['check_in_time'].split(':')[0]), minute=int(home['check_in_time'].split(':')[1]))
-            check_out = check_out.replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]))
-            if current_time <= check_in <= end_time:
-                create_access_code(home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
 
 # Schedule tasks
 schedule.every(15).minutes.do(process_bookings)
-schedule.every().day.at("00:00").do(list_upcoming_bookings)  # Schedule listing of upcoming bookings at midnight daily
+schedule.every().day.at("00:00").do(lambda: list_upcoming_bookings())  # Schedule listing of upcoming bookings at midnight daily
 schedule_cleanup_jobs()
 
 def main():
@@ -199,7 +234,6 @@ def main():
         while True:
             schedule.run_pending()
             time.sleep(1)
-
 
 if __name__ == "__main__":
     main()
