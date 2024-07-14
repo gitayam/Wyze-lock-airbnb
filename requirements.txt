@@ -6,3 +6,4 @@ python-dotenv
 schedule
 argparse
 pytz
+pyotp
