@@ -1,21 +1,19 @@
-#wyze-locak-airbnb.py
-import requests
-from icalendar import Calendar
-from wyze_sdk import Client
-from wyze_sdk.errors import WyzeApiError, WyzeRequestError  # Ensure WyzeRequestError is imported
-from wyze_sdk.models.devices.locks import LockKey, LockKeyPermission, LockKeyPeriodicity
-import re
-import schedule
-import time
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
 import os
-import argparse
-#import smtp as smtplib
-import pytz
+import re
+import time
+import requests
 import smtplib
+import argparse
+import schedule
+from icalendar import Calendar
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from wyze_sdk import Client
+from wyze_sdk.errors import WyzeApiError, WyzeRequestError
+from wyze_sdk.models.devices.locks import LockKeyPermission, LockKeyPeriodicity
+from wyze_sdk.signature import CBCEncryptor, MD5Hasher
 
 # Load environment variables from .env file
 load_dotenv()
@@ -39,7 +37,7 @@ HOMES = [
 ]
 WYZE_ACCESS_TOKEN = os.getenv('WYZE_ACCESS_TOKEN')
 WYZE_REFRESH_TOKEN = os.getenv('WYZE_REFRESH_TOKEN')
-#Send email alert with roll up of locks set by homes and times/dates. This should run each time a lock is set
+
 def sendEmail(home, lock, check_in, check_out):
     MAIL_TO = os.getenv('MAIL_TO')
     SMTP_HOST = os.getenv('SMTP_HOST')
@@ -86,6 +84,7 @@ def sendEmail(home, lock, check_in, check_out):
     except Exception as e:
         print(f"Failed to send email: {e}")
         return False
+
 # Function to refresh the access token
 def refresh_access_token(refresh_token):
     url = "https://api.wyzecam.com/app/user/refresh_token"
@@ -133,11 +132,6 @@ def get_client():
             raise e  # Re-raise the original error if it's not an access token issue
     return client
 
-# Mock function for get_crypt_secret since actual endpoint is unknown
-def get_crypt_secret():
-    # This is a mock function. Replace this with actual functionality if available.
-    return "mock_secret"
-
 def fetch_airbnb_bookings(ical_url):
     response = requests.get(ical_url)
     response.raise_for_status()
@@ -161,13 +155,15 @@ def fetch_airbnb_bookings(ical_url):
                     'guest_name': guest_name
                 })
     return bookings
+
 def sendTestEmail(email, subject, body):
     SMTP_HOST = os.getenv('SMTP_HOST')
-    SMTP_FROM = os.getenv('SMTP_FROM')
-    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
     SMTP_PORT = os.getenv('SMTP_PORT')
+    SMTP_USER = os.getenv('SMTP_USERNAME')
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+    SMTP_FROM = os.getenv('SMTP_FROM')
 
-    if not all([SMTP_HOST, SMTP_FROM, SMTP_PASSWORD, SMTP_PORT]):
+    if not all([SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM]):
         print("Error: Missing environment variables for email configuration.")
         return False
 
@@ -178,9 +174,9 @@ def sendTestEmail(email, subject, body):
     msg.attach(MIMEText(body, 'plain'))
 
     try:
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server = smtplib.SMTP(SMTP_HOST, int(SMTP_PORT))
         server.starttls()
-        server.login(SMTP_FROM, SMTP_PASSWORD)
+        server.login(SMTP_USER, SMTP_PASSWORD)
         server.sendmail(SMTP_FROM, email, msg.as_string())
         server.quit()
         print("Test email sent successfully.")
@@ -189,7 +185,7 @@ def sendTestEmail(email, subject, body):
         print(f"Failed to send test email: {e}")
         return False
 
-def list_upcoming_bookings(days=7):
+def list_upcoming_bookings(client, days=7):
     upcoming_bookings = []
     current_time = datetime.now()
     end_time = current_time + timedelta(days=days)
@@ -213,7 +209,7 @@ def list_upcoming_bookings(days=7):
     for booking in upcoming_bookings:
         print(f"Home: {booking['home']}, Guest: {booking['guest_name']}, Check-in: {booking['check_in']}, Check-out: {booking['check_out']}, Access Code: {booking['access_code']}")
 
-def process_bookings_for_days(days):
+def process_bookings_for_days(client, days):
     current_time = datetime.now()
     end_time = current_time + timedelta(days=days)
 
@@ -225,11 +221,19 @@ def process_bookings_for_days(days):
             check_in = check_in.replace(hour=int(home['check_in_time'].split(':')[0]), minute=int(home['check_in_time'].split(':')[1]))
             check_out = check_out.replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]))
             if current_time <= check_in <= end_time:
-                create_access_code(home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
+                create_access_code(client, home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
 
-def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
-    access_code = str(guest_phone_last4).encode()  # Ensure access_code is a string
-    access_code = str(access_code)  
+def encrypt_access_code(client, access_code: str) -> str:
+    secret = client.locks._ford_client().get_crypt_secret()["secret"]
+    iv = bytes.fromhex(client.locks._ford_client().WYZE_FORD_IV_HEX)
+    if len(iv) != 16:
+        raise ValueError("Incorrect IV length (it must be 16 bytes long)")
+    hashed_secret = MD5Hasher().hash(secret)
+    encrypted_access_code = CBCEncryptor(iv).encrypt(hashed_secret, access_code.encode())
+    return encrypted_access_code.hex()
+
+def create_access_code(client, device_mac, guest_phone_last4, check_in, check_out):
+    access_code = str(guest_phone_last4)
     print(f"DEBUG: Access code before validation: {access_code}")  # Debug print
     days_stay = (check_out - check_in).days
     name = f"{check_in.strftime('%a')}-{days_stay}days"
@@ -243,11 +247,15 @@ def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
 
     try:
         # Validate access_code as a string
-        if not re.match(r'\d{4,8}$', str(access_code)):  # Ensure the check is on the string representation
+        if not re.match(r'^\d{4,8}$', access_code):
             raise ValueError("Access code must be a 4-8 digit number")
+
+        # Encrypt the access code
+        encrypted_access_code = encrypt_access_code(client, access_code)
+
         response = client.locks.create_access_code(
             device_mac=device_mac,
-            access_code=str(access_code).encode(),  # Correct to encode after validation
+            access_code=encrypted_access_code,
             name=name,
             permission=permission,
             periodicity=periodicity
@@ -264,8 +272,7 @@ def create_access_code(device_mac, guest_phone_last4, check_in, check_out):
     except Exception as e:
         print(f"Unexpected error while creating access code for {name} with data {access_code}: {e}")
 
-
-def delete_access_codes(device_mac, check_out_time):
+def delete_access_codes(client, device_mac, check_out_time):
     keys = client.locks.get_keys(device_mac=device_mac)
     for key in keys:
         if key.name.endswith(f"days") and datetime.strptime(key.periodicity.end_time, "%Y-%m-%dT%H:%M:%S") <= check_out_time:
@@ -278,27 +285,28 @@ def delete_access_codes(device_mac, check_out_time):
             except WyzeApiError as e:
                 print(f"Failed to delete access code {key.id} from {device_mac}: {e}")
 
-def process_bookings():
+def process_bookings(client):
     for home in HOMES:
         bookings = fetch_airbnb_bookings(home['ical_url'])
         for booking in bookings:
             check_in = booking['check_in'].replace(hour=int(home['check_in_time'].split(':')[0]), minute=int(home['check_in_time'].split(':')[1]))
             check_out = booking['check_out'].replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]))
-            create_access_code(home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
+            create_access_code(client, home['lock_device_mac'], booking['guest_phone_last4'], check_in, check_out)
 
-def schedule_cleanup_jobs():
+def schedule_cleanup_jobs(client):
     for home in HOMES:
         schedule_time = home['check_out_time']
-        schedule.every().day.at(schedule_time).do(cleanup_access_codes_for_home, home)
+        schedule.every().day.at(schedule_time).do(cleanup_access_codes_for_home, client, home)
 
-def cleanup_access_codes_for_home(home):
+def cleanup_access_codes_for_home(client, home):
     current_time = datetime.now().replace(hour=int(home['check_out_time'].split(':')[0]), minute=int(home['check_out_time'].split(':')[1]), second=0, microsecond=0)
-    delete_access_codes(home['lock_device_mac'], current_time)
+    delete_access_codes(client, home['lock_device_mac'], current_time)
 
 # Schedule tasks
-schedule.every(15).minutes.do(process_bookings)
-schedule.every().day.at("00:00").do(lambda: list_upcoming_bookings())  # Schedule listing of upcoming bookings at midnight daily
-schedule_cleanup_jobs()
+def schedule_tasks(client):
+    schedule.every(15).minutes.do(process_bookings, client)
+    schedule.every().day.at("00:00").do(lambda: list_upcoming_bookings(client))  # Schedule listing of upcoming bookings at midnight daily
+    schedule_cleanup_jobs(client)
 
 def main():
     parser = argparse.ArgumentParser(description="Wyze Lock Airbnb Automation Script")
@@ -306,6 +314,8 @@ def main():
     parser.add_argument('--set-days', type=int, help="Set access codes for bookings in the next specified number of days")
     parser.add_argument('--testemail', action='store_true', help="Send a test email to verify email configuration")
     args = parser.parse_args()
+
+    client = get_client()
 
     if args.testemail:
         # Define the test email details
@@ -315,13 +325,11 @@ def main():
         sendTestEmail(test_email, test_subject, test_body)
         return  # Use return to exit the function after sending test email
     elif args.list_upcoming:
-        client = get_client()  # Initialize Wyze client only if not testing email
-        list_upcoming_bookings()
+        list_upcoming_bookings(client)
     elif args.set_days:
-        client = get_client()  # Initialize Wyze client only if not testing email
-        process_bookings_for_days(args.set_days)
+        process_bookings_for_days(client, args.set_days)
     else:
-        client = get_client()  # Initialize Wyze client only if not testing email
+        schedule_tasks(client)
         while True:
             schedule.run_pending()
             time.sleep(1)
