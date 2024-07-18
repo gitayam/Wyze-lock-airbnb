@@ -5,6 +5,8 @@ This project automates the management of Wyze lock access codes based on Airbnb 
 #NOTE: Still in active development. 
 
 ## Roadmap
+- [x] Take Last 4 from Airbnb Calendar Event
+- [ ] Keypad working (working, currently have an [issue](https://github.com/shauntarves/wyze-sdk/issues/184))
 - [ ] Constant running checking every x min between a time range (checkin time)
 - [ ] Build into a website for non cli use
 - [ ] Work with other brands
