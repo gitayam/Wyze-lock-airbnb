@@ -44,10 +44,38 @@ This project automates the management of Wyze lock access codes based on Airbnb 
    ```
    - Or create a `.env` file in the project directory and add the following:
   ```env
-  WYZE_EMAIL=your_email@example.com
-  WYZE_PASSWORD=your_password
-  WYZE_API_KEY=your_api_key
-  WYZE_KEY_ID=your_key_id
+#.env-template
+WYZE_EMAIL=your_email@example.com # required the first time to obtain the access token
+WYZE_PASSWORD=your_password # required the first time to obtain the access token
+WYZE_TOTP_KEY=your_totp_key # required to login when account has MFA enabled
+WYZE_API_KEY=your_api_key
+WYZE_KEY_ID=your_key_id
+WYZE_ACCESS_TOKEN=your_access_token # provided by the script
+WYZE_REFRESH_TOKEN=your_refresh_token # provided by the script
+
+HOME_1_NAME="Name House"
+HOME_1_ICAL_URL=your_home_1_airbnb_ical_url
+HOME_1_LOCK_DEVICE_MAC=your_home_1_lock_device_mac
+HOME_1_KEYPAD_SERIAL_NUMBER=your_home_1_keypad_device_mac
+HOME_1_CHECK_IN_TIME=16:00
+HOME_1_CHECK_OUT_TIME=11:00
+
+HOME_1_NAME="Name House"
+HOME_2_ICAL_URL=your_home_2_airbnb_ical_url
+HOME_2_LOCK_DEVICE_MAC=your_home_2_lock_device_mac
+HOME_2_KEYPAD_SERIAL_NUMBER=your_home_2_keypad_device_mac
+HOME_2_CHECK_IN_TIME=15:00
+HOME_2_CHECK_OUT_TIME=10:00
+
+#SMTP SERVERS
+SMTP_HOST=smtp.host.com
+SMTP_PORT=587
+SMTP_USERNAME=USERNAME_HERE
+SMTP_PASSWORD=PASSWORD_HERE
+SMTP_FROM=EMAIL_HERE
+MAIL_TO=EMAIL_HERE
+MAIL_CC=EMAIL_CC_HERE
+
   ```
 
 5. **Obtain Access and Refresh Tokens**
