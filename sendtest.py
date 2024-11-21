@@ -1,3 +1,4 @@
+#./sendtest.py 
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -7,7 +8,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-def sendTestEmail(email, subject, body):
+def sendTestEmail(emails, subject, body):
     SMTP_HOST = os.getenv('SMTP_HOST')
     SMTP_PORT = os.getenv('SMTP_PORT')
     SMTP_USER = os.getenv('SMTP_USERNAME')
@@ -26,22 +27,25 @@ def sendTestEmail(email, subject, body):
 
     msg = MIMEMultipart()
     msg['From'] = SMTP_FROM
-    msg['To'] = email
+    msg['To'] = emails
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'plain'))
+
+    # Ensure emails are a list for smtplib
+    recipient_list = [email.strip() for email in emails.split(',')]
+    print(f"Recipients: {recipient_list}")  # Debugging recipients
 
     try:
         server = smtplib.SMTP(SMTP_HOST, int(SMTP_PORT))
         server.starttls()
         server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_FROM, email, msg.as_string())
+        server.sendmail(SMTP_FROM, recipient_list, msg.as_string())
         server.quit()
         print("Test email sent successfully.")
         return True
     except Exception as e:
         print(f"Failed to send test email: {e}")
         return False
-
 def main():
     # Define the test email details
     test_email = os.getenv('MAIL_TO')
