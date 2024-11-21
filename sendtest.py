@@ -32,6 +32,9 @@ def sendTestEmail(emails, subject, body):
     msg.attach(MIMEText(body, 'plain'))
 
     # Ensure emails are a list for smtplib
+    # check if semicolon are used as separator and replace with comma
+    if ';' in emails:
+        emails = emails.replace(';', ',')
     recipient_list = [email.strip() for email in emails.split(',')]
     print(f"Recipients: {recipient_list}")  # Debugging recipients
 
